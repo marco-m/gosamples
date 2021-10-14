@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"strings"
 
 	"github.com/hashicorp/go-hclog"
 )
@@ -40,7 +41,7 @@ func LogRun(log hclog.Logger, cmd *exec.Cmd) error {
 	}
 
 	if err := cmd.Start(); err != nil {
-		return err
+		return fmt.Errorf("start: %s", err)
 	}
 
 	scanOut := bufio.NewScanner(stdout)
@@ -50,9 +51,6 @@ func LogRun(log hclog.Logger, cmd *exec.Cmd) error {
 			log.Debug("", "stdout", truncate(line, 80))
 		}
 	}
-	if err := scanOut.Err(); err != nil {
-		return err
-	}
 
 	scanErr := bufio.NewScanner(stderr)
 	for scanErr.Scan() {
@@ -61,12 +59,22 @@ func LogRun(log hclog.Logger, cmd *exec.Cmd) error {
 			log.Debug("", "stderr", truncate(line, 80))
 		}
 	}
-	if err := scanErr.Err(); err != nil {
-		return err
-	}
+
+	// Collect errors
+	var bld strings.Builder
+	fmt.Println(bld.String())
 
 	if err := cmd.Wait(); err != nil {
-		return err
+		fmt.Fprintf(&bld, "wait: %s", err)
+	}
+	if err := scanOut.Err(); err != nil {
+		fmt.Fprintf(&bld, "; stdout: %s", err)
+	}
+	if err := scanErr.Err(); err != nil {
+		fmt.Fprintf(&bld, "; stderr: %s", err)
+	}
+	if bld.Len() > 0 {
+		return fmt.Errorf("%s", bld.String())
 	}
 
 	return nil
